@@ -10,5 +10,7 @@ terraform {
 
 provider "aws" {
   # Configuration options
+  #region = var.region_deploy 
+  #region = "ap-south-1" 
   region = "us-east-1"
-}
+} 

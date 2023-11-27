@@ -1,12 +1,133 @@
 
 resource "aws_vpc" "main" {
-  cidr_block       = "192.168.0.0/24"
-  instance_tenancy = "default"
+  # cidr_block       = "192.168.0.0/24"
+  cidr_block = var.vpc_cidr_address
+  # instance_tenancy = "default" 
+  instance_tenancy     = var.instance_tenancy
+  enable_dns_hostnames = var.enable_dns_hostnames_enabled
+  enable_dns_support   = var.enable_dns_support_enabled
 
   tags = {
-    Name = "terraform-vpc"
+    #Name = "terraform-vpc"
+    Name = var.vpc_name
   }
 }
+# data "aws_availability_zones" "this" {
+#   state = "available"
+# }
+
+resource "aws_subnet" "private_subnet" {
+  for_each          = { for index, az_name in slice(data.aws_availability_zones.this.names, var.start-index-private, var.end-index-private) : index => az_name }
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key) # Adjust subnet mask as needed
+  availability_zone = each.value
+  tags = {
+    Name = "private-subnet-${each.key}"
+  }
+}
+
+resource "aws_subnet" "public_subnet" {
+  for_each = { for index, az_name in slice(data.aws_availability_zones.this.names, var.start-index-public, var.end-index-public) : index => az_name }
+  vpc_id   = aws_vpc.main.id
+  #cidr_block        = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key + length(data.aws_availability_zones.this.names)) # Adjust subnet mask as needed
+  cidr_block        = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key + var.end-index-private) # Adjust subnet mask as needed
+  availability_zone = each.value
+  tags = {
+    Name = "public-subnet-${each.key}"
+  }
+}
+
+# default route table, during the time of vpc default route table will be created 
+resource "aws_default_route_table" "public-route" {
+  default_route_table_id = aws_vpc.main.default_route_table_id
+
+
+  tags = {
+    Name = "private-route-${aws_vpc.main.id}"
+  }
+}
+
+# creating route for public transfer 
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"             # for public route table cidr block has to be public for internet gateway transmission of data. 
+    gateway_id = aws_internet_gateway.gw.id
+  }
+
+  tags = {
+    Name = "public-route-${aws_vpc.main.id}"
+  }
+}
+
+# creating internet gateway 
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "igw-${aws_vpc.main.id}"
+  }
+}
+
+
+
+
+
+
+
+
+# resource "aws_subnet" "private_subnet" {
+#   vpc_id     = aws_vpc.main.id
+#   for_each   = { for index, az_name in data.aws_availability_zones.this.names : index => az_name }
+#   cidr_block = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 4 ? 4 : 3, each.key)
+#   availability_zone = each.value
+
+#   tags = {
+#     Name = "private-subnet-${each.key}"
+#   }
+
+
+# }
+
+# resource "aws_subnet" "public_subnet" {
+#   vpc_id     = aws_vpc.main.id
+#   for_each   = { for index, az_name in data.aws_availability_zones.this.names : index => az_name }
+#   cidr_block = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 4 ? 4 : 3, each.key + length(data.aws_availability_zones.this.names))
+#   availability_zone = each.value 
+#   tags = {
+#     Name = "public-subnet-${each.key}"
+#   }
+
+
+#}
+
+
+
+# resource "aws_subnet" "private_subnet" {
+#     for_each = {for index, az_name in data.aws_availability_zones.this.names : index => az_name }
+#     vpc_id = aws_vpc.main.id
+#     #cidr_block = 
+
+# }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # resource "aws_subnet" "subnet-az1" {
 #   for_each = {
@@ -34,16 +155,18 @@ resource "aws_vpc" "main" {
 #   }
 # }
 
-resource "aws_subnet" "subnet" {
-  count      = length(var.subnet1)
-  vpc_id     = aws_vpc.main.id
-  cidr_block = var.subnet1[count.index]
 
-  tags = {
-    Name = "subnet-${count.index + 1}"
-  }
 
-}
+# resource "aws_subnet" "subnet" {
+#   count      = length(var.subnet1)
+#   vpc_id     = aws_vpc.main.id
+#   cidr_block = var.subnet1[count.index]
+
+#   tags = {
+#     Name = "subnet-${count.index + 1}"
+#   }
+
+# }
 
 
 
