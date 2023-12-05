@@ -5,6 +5,17 @@ terraform {
       source  = "hashicorp/aws"
       version = "~>5.0.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "3.2.2"
+    }
+  }
+  backend "s3" {
+    bucket         = "my-terraform-state-file-checking"
+    key            = "terraform-state-file"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-dynamodb"
+    encrypt        = true
   }
 }
 

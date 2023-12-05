@@ -17,10 +17,11 @@ resource "aws_vpc" "main" {
 # }
 
 resource "aws_subnet" "private_subnet" {
-  for_each          = { for index, az_name in slice(data.aws_availability_zones.this.names, var.start-index-private, var.end-index-private) : index => az_name }
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key) # Adjust subnet mask as needed
-  availability_zone = each.value
+  for_each                = { for index, az_name in slice(data.aws_availability_zones.this.names, var.start-index-private, var.end-index-private) : index => az_name }
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key) # Adjust subnet mask as needed
+  availability_zone       = each.value
+  map_public_ip_on_launch = "true"
   tags = {
     Name = "private-subnet-${each.key}"
   }
@@ -30,16 +31,22 @@ resource "aws_subnet" "public_subnet" {
   for_each = { for index, az_name in slice(data.aws_availability_zones.this.names, var.start-index-public, var.end-index-public) : index => az_name }
   vpc_id   = aws_vpc.main.id
   #cidr_block        = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key + length(data.aws_availability_zones.this.names)) # Adjust subnet mask as needed
-  cidr_block        = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key + var.end-index-private) # Adjust subnet mask as needed
-  availability_zone = each.value
+  cidr_block              = cidrsubnet(var.vpc_cidr_address, length(data.aws_availability_zones.this.names) > 3 ? 4 : 3, each.key + var.end-index-private) # Adjust subnet mask as needed
+  availability_zone       = each.value
+  map_public_ip_on_launch = "true"
   tags = {
     Name = "public-subnet-${each.key}"
   }
 }
 
 # default route table, during the time of vpc default route table will be created 
-resource "aws_default_route_table" "public-route" {
+resource "aws_default_route_table" "private-route" {
   default_route_table_id = aws_vpc.main.default_route_table_id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.example.id
+  }
 
 
   tags = {
@@ -48,11 +55,11 @@ resource "aws_default_route_table" "public-route" {
 }
 
 # creating route for public transfer 
-resource "aws_route_table" "public" {
+resource "aws_route_table" "public-route" {
   vpc_id = aws_vpc.main.id
 
   route {
-    cidr_block = "0.0.0.0/0"             # for public route table cidr block has to be public for internet gateway transmission of data. 
+    cidr_block = "0.0.0.0/0" # for public route table cidr block has to be public for internet gateway transmission of data. 
     gateway_id = aws_internet_gateway.gw.id
   }
 
@@ -71,9 +78,40 @@ resource "aws_internet_gateway" "gw" {
 }
 
 
+# creating route-table association for private subnet
+resource "aws_route_table_association" "private-subnet" {
+  for_each       = { for index, each_subnet in aws_subnet.private_subnet : index => each_subnet.id }
+  subnet_id      = each.value
+  route_table_id = aws_default_route_table.private-route.id
+}
 
 
+resource "aws_route_table_association" "public-subnet" {
+  for_each  = { for index, each_subnet in aws_subnet.public_subnet : index => each_subnet.id }
+  subnet_id = each.value
+  #subnet_id      = aws_subnet.public_subnet.id
+  route_table_id = aws_route_table.public-route.id
+}
 
+
+resource "aws_nat_gateway" "example" {
+  allocation_id = aws_eip.lb.id
+  subnet_id     = element([for each_subnet in aws_subnet.public_subnet : each_subnet.id], 0)
+
+  tags = {
+    Name = "gw NAT"
+  }
+
+  # To ensure proper ordering, it is recommended to add an explicit dependency
+  # on the Internet Gateway for the VPC.
+  #depends_on = [aws_internet_gateway.example]
+}
+
+# creating EIP for nat-gateway 
+resource "aws_eip" "lb" {
+  #instance = aws_instance.web.id
+  domain = "vpc"
+}
 
 
 

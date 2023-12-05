@@ -68,3 +68,41 @@ variable "end-index-public" {
   default     = 1
 
 }
+
+variable "ingress_rules" {
+  description = "List of ingress rules"
+  type = list(object({
+    description = string
+    from_port   = number
+    to_port     = number
+    protocol    = string
+    #cidr_blocks = list(string)
+    // Uncomment if you need IPv6
+    // ipv6_cidr_blocks = list(string)
+  }))
+  default = [
+    {
+      description = "TLS from VPC"
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+      # cidr_blocks = ["0.0.0.0/0"] // Replace with var.vpc_cidr_address or specific CIDR
+      // ipv6_cidr_blocks = ["::/0"]
+    },
+    {
+      description = "SSH from VPC"
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      #cidr_blocks = ["0.0.0.0/0"] // Replace with var.vpc_cidr_address or specific CIDR
+      // ipv6_cidr_blocks = ["::/0"]
+    }
+  ]
+}
+
+
+variable "key_name" {
+  description = "keypair name"
+  default     = "deployer-key"
+
+}
